@@ -98,7 +98,7 @@ Update the `password` field in the `jaas.conf` with the primary connection strin
 For example:
 
     KafkaClient {
-        org.apache.kafka.common.security.plain.PlainLoginModule required username="$ConnectionString" password=Endpoint="sb://foobar-eventhub-namespace.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=Nbaz0D42MT7qwerty6D/W51ao42r6EJuxR/zEqwerty=";
+        org.apache.kafka.common.security.plain.PlainLoginModule required username="$ConnectionString" password="Endpoint=sb://foobar-eventhub-namespace.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=Nbaz0D42MT7qwerty6D/W51ao42r6EJuxR/zEqwerty=";
     };
 
 ## Connect to Event Hubs using Kafka CLI
@@ -107,7 +107,7 @@ On your local machine, use a new terminal to start a **Kafka Consumer** - set th
 
     export EVENT_HUBS_NAMESPACE=[to be filled]
     export EVENT_HUB_NAME=[to be filled]
-    export export KAFKA_OPTS="-Djava.security.auth.login.config=jaas.conf"
+    export KAFKA_OPTS="-Djava.security.auth.login.config=jaas.conf"
     export KAFKA_INSTALL_HOME=[to be filled] e.g. /Users/foo/kafka_2.12-2.3.0/
 
 Start consuming
@@ -122,7 +122,7 @@ Use another terminal to start a **Kafka Producer** - set the required variables 
 
     export EVENT_HUBS_NAMESPACE=[to be filled]
     export EVENT_HUB_NAME=[to be filled]
-    export export KAFKA_OPTS="-Djava.security.auth.login.config=jaas.conf"
+    export KAFKA_OPTS="-Djava.security.auth.login.config=jaas.conf"
     export KAFKA_INSTALL_HOME=[to be filled] e.g. /Users/foo/kafka_2.12-2.3.0/
 
 Start the producer

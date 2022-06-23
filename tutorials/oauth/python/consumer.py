@@ -7,108 +7,63 @@
 #
 # Original Confluent sample modified for use with Azure Event Hubs for Apache Kafka Ecosystems
 
-from confluent_kafka import Consumer, KafkaException, KafkaError
+import signal
 import sys
-import getopt
-import json
-import logging
-from pprint import pformat
+import time
+from confluent_kafka import Consumer
+from azure.identity import DefaultAzureCredential
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+FULLY_QUALIFIED_NAMESPACE= os.environ['EVENT_HUB_HOSTNAME']
+EVENTHUB_NAME = os.environ['EVENT_HUB_NAME']
+CONSUMER_GROUP='$Default'
+AUTH_SCOPE= "https://" + FULLY_QUALIFIED_NAMESPACE +"/.default"
+
+# AAD
+cred = DefaultAzureCredential()
 
 
-def stats_cb(stats_json_str):
-    stats_json = json.loads(stats_json_str)
-    print('\nKAFKA Stats: {}\n'.format(pformat(stats_json)))
+def _get_token(config):
+    """Note here value of config comes from sasl.oauthbearer.config below.
+    It is not used in this example but you can put arbitrary values to
+    configure how you can get the token (e.g. which token URL to use)
+    """
+    access_token = cred.get_token(AUTH_SCOPE)
+    return access_token.token, time.time() + access_token.expires_on
 
 
-def print_usage_and_exit(program_name):
-    sys.stderr.write('Usage: %s [options..] <consumer-group> <topic1> <topic2> ..\n' % program_name)
-    options = '''
- Options:
-  -T <intvl>   Enable client statistics at specified interval (ms)
-'''
-    sys.stderr.write(options)
-    sys.exit(1)
+consumer = Consumer({
+    "bootstrap.servers": FULLY_QUALIFIED_NAMESPACE + ":9093",
+    "sasl.mechanism": "OAUTHBEARER",
+    "security.protocol": "SASL_SSL",
+    "oauth_cb": _get_token,
+    "group.id": CONSUMER_GROUP,
+    # "debug": "broker,topic,msg"
+})
 
 
-if __name__ == '__main__':
-    optlist, argv = getopt.getopt(sys.argv[1:], 'T:')
-    if len(argv) < 2:
-        print_usage_and_exit(sys.argv[0])
+def signal_handler(sig, frame):
+    print("exiting")
+    consumer.close()
+    sys.exit(0)
 
-    group = argv[0]
-    topics = argv[1:]
-    # Consumer configuration
-    # See https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md
-    conf = {
-        'bootstrap.servers': 'mynamespace.servicebus.windows.net:9093', #update
-        'security.protocol': 'SASL_SSL',
-        'ssl.ca.location': '/path/to/ca-certificate.crt',
-        'sasl.mechanism': 'PLAIN',
-        'sasl.username': '$ConnectionString',
-        'sasl.password': '{YOUR.EVENTHUBS.CONNECTION.STRING}',          #update
-        'group.id': group,
-        'client.id': 'python-example-consumer',
-        'request.timeout.ms': 60000,
-        'session.timeout.ms': 60000,
-        'default.topic.config': {'auto.offset.reset': 'smallest'}
-    }
 
-    # Check to see if -T option exists
-    for opt in optlist:
-        if opt[0] != '-T':
-            continue
-        try:
-            intval = int(opt[1])
-        except ValueError:
-            sys.stderr.write("Invalid option value for -T: %s\n" % opt[1])
-            sys.exit(1)
+signal.signal(signal.SIGINT, signal_handler)
 
-        if intval <= 0:
-            sys.stderr.write("-T option value needs to be larger than zero: %s\n" % opt[1])
-            sys.exit(1)
+print("consuming " + EVENTHUB_NAME)
+consumer.subscribe([EVENTHUB_NAME])
 
-        conf['stats_cb'] = stats_cb
-        conf['statistics.interval.ms'] = int(opt[1])
+while True:
+    msg = consumer.poll(1.0)
 
-    # Create logger for consumer (logs will be emitted when poll() is called)
-    logger = logging.getLogger('consumer')
-    logger.setLevel(logging.DEBUG)
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter('%(asctime)-15s %(levelname)-8s %(message)s'))
-    logger.addHandler(handler)
+    if msg is None:
+        continue
+    if msg.error():
+        print(f"Consumer error: {msg.error()}")
+        continue
 
-    # Create Consumer instance
-    # Hint: try debug='fetch' to generate some log messages
-    c = Consumer(conf, logger=logger)
-
-    def print_assignment(consumer, partitions):
-        print('Assignment:', partitions)
-
-    # Subscribe to topics
-    c.subscribe(topics, on_assign=print_assignment)
-
-    # Read messages from Kafka, print to stdout
-    try:
-        while True:
-            msg = c.poll(timeout=100.0)
-            if msg is None:
-                continue
-            if msg.error():
-                # Error or event
-                if msg.error().code() == KafkaError._PARTITION_EOF:
-                    # End of partition event
-                    sys.stderr.write('%% %s [%d] reached end at offset %d\n' %
-                                     (msg.topic(), msg.partition(), msg.offset()))
-                else:
-                    # Error
-                    raise KafkaException(msg.error())
-            else:
-                # Proper message
-                print(msg.value())
-
-    except KeyboardInterrupt:
-        sys.stderr.write('%% Aborted by user\n')
-
-    finally:
-        # Close down consumer to commit final offsets.
-        c.close()
+    print(
+        f"Received message [{msg.partition()}]: {msg.value().decode('utf-8')}")

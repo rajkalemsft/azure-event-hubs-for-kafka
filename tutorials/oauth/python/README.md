@@ -22,14 +22,6 @@ Running the setup script provided in this repo will install and configure all of
 
 An Event Hubs namespace is required to send or receive from any Event Hubs service. See [Create Kafka-enabled Event Hubs](https://docs.microsoft.com/azure/event-hubs/event-hubs-create-kafka-enabled) for instructions on getting an Event Hubs Kafka endpoint. Make sure to copy the Event Hubs connection string for later use.
 
-### FQDN
-
-For these samples, you will need the connection string from the portal as well as the FQDN that points to your Event Hub namespace. **The FQDN can be found within your connection string as follows**:
-
-`Endpoint=sb://`**`mynamespace.servicebus.windows.net`**`/;SharedAccessKeyName=XXXXXX;SharedAccessKey=XXXXXX`
-
-If your Event Hubs namespace is deployed on a non-Public cloud, your domain name may differ (e.g. \*.servicebus.chinacloudapi.cn, \*.servicebus.usgovcloudapi.net, or \*.servicebus.cloudapi.de).
-
 ## Getting ready
 
 Now that you have a Kafka-enabled Event Hubs connection string, clone the Azure Event Hubs for Kafka repository and navigate to the `quickstart/python` subfolder:
@@ -51,11 +43,25 @@ source setup.sh
 
 ### Update your configurations
 
-Both the producer and consumer samples require extra configuration to find and authenticate with your Event Hubs namespace.
+Both the producer and consumer samples require extra configuration to authenticate with your Event Hubs namespace. Add required configurations to environment (.env) file at the root folder.
 
-Update `bootstrap.servers` and `sasl.password` in `producer.py` and `consumer.py` to direct the producer to the Event Hubs Kafka endpoint with the correct authentication.
+    AZURE_AUTHORITY_HOST=login.microsoftonline.com
 
-Be sure to replace the `ssl.ca.location` value with the path to a trusted certificate store.  Ubuntu distributions can typically use the default `/usr/lib/ssl/certs/ca-certificates.crt`; MacOS users that installed `openssl` via Homebrew can typically use `/usr/local/etc/openssl/cert.pem`.
+    AZURE_CLIENT_ID=<<AppClientId>>
+
+    AZURE_CLIENT_SECRET=<<AppSecret>>
+
+    AZURE_TENANT_ID=<<TenantID>>
+
+    AZURE_CLIENT_CERTIFICATE_PATH=<<AzureAdClientSecretCertPath>> ## For Certs remove the AZURE_CLIENT_SECRET entry from .env file
+    
+    AZURE_CLIENT_SEND_CERTIFICATE_CHAIN=<<TrueToValidateISsuesAndSubjectName>>
+  
+    EVENT_HUB_HOSTNAME=<<EventHubNameSpace>>
+
+    EVENT_HUB_NAME=<<EvemtHubName>>
+
+    CONSUMER_GROUP=<<ConsumerGroupName>>
 
 ### Producing
  
@@ -68,18 +74,12 @@ Note that the topic must already exist or else you will see an "Unknown topic or
 ### Consuming
 
 ```shell
-python consumer.py <your-consumer-group> <topic.1> <topic.2> ... <topic.n> 
+python consumer.py 
 ```
 
-## Troubleshooting
+### Dependencies
 
-This tutorial has a lot of dependencies, so we recommend using the provided setup script. If that doesn't work, here are some potential solutions:
+    **Azure.Identity** -> For Azure AD AUTH. Please refer defaultazurecredential
 
-* Run `$ sudo apt-get purge librdkafka1` and rerun the setup script.
-* Clone Confluent's python Kafka library from Github and install that instead of the official pip package:
+    **Confluent-Kafka** -> To connect to EventHub using Kafka protocol
 
-```shell
-git clone https://github.com/confluentinc/confluent-kafka-python
-pip uninstall confluent-kafka
-pip install ./confluent-kafka-python/
-```

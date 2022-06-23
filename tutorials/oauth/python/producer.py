@@ -7,47 +7,60 @@
 #
 # Original Confluent sample modified for use with Azure Event Hubs for Apache Kafka Ecosystems
 
+import time
 from confluent_kafka import Producer
-import sys
+from azure.identity import DefaultAzureCredential
+from dotenv import load_dotenv
+import os
 
-if __name__ == '__main__':
-    if len(sys.argv) != 2:
-        sys.stderr.write('Usage: %s <topic>\n' % sys.argv[0])
-        sys.exit(1)
-    topic = sys.argv[1]
+load_dotenv()
 
-    # Producer configuration
-    # See https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md
-    # See https://github.com/edenhill/librdkafka/wiki/Using-SSL-with-librdkafka#prerequisites for SSL issues
-    conf = {
-        'bootstrap.servers': 'mynamespace.servicebus.windows.net:9093', #replace
-        'security.protocol': 'SASL_SSL',
-        'ssl.ca.location': '/path/to/ca-certificate.crt',
-        'sasl.mechanism': 'PLAIN',
-        'sasl.username': '$ConnectionString',
-        'sasl.password': '{YOUR.EVENTHUBS.CONNECTION.STRING}',          #replace
-        'client.id': 'python-example-producer'
-    }
+FULLY_QUALIFIED_NAMESPACE= os.environ['EVENT_HUB_HOSTNAME']
+EVENTHUB_NAME = os.environ['EVENT_HUB_NAME']
+AUTH_SCOPE= "https://" + FULLY_QUALIFIED_NAMESPACE +"/.default"
 
-    # Create Producer instance
-    p = Producer(**conf)
+# AAD
+cred = DefaultAzureCredential()
+
+def _get_token(config):
+    """Note here value of config comes from sasl.oauthbearer.config below.
+    It is not used in this example but you can put arbitrary values to
+    configure how you can get the token (e.g. which token URL to use)
+    """
+    access_token = cred.get_token(AUTH_SCOPE)
+    return access_token.token, time.time() + access_token.expires_on
 
 
-    def delivery_callback(err, msg):
-        if err:
-            sys.stderr.write('%% Message failed delivery: %s\n' % err)
-        else:
-            sys.stderr.write('%% Message delivered to %s [%d] @ %o\n' % (msg.topic(), msg.partition(), msg.offset()))
+producer = Producer({
+    "bootstrap.servers": FULLY_QUALIFIED_NAMESPACE + ":9093",
+    "sasl.mechanism": "OAUTHBEARER",
+    "security.protocol": "SASL_SSL",
+    "oauth_cb": _get_token,
+    "enable.idempotence": True,
+    "acks": "all",
+    # "debug": "broker,topic,msg"
+})
 
 
-    # Write 1-100 to topic
-    for i in range(0, 100):
-        try:
-            p.produce(topic, str(i), callback=delivery_callback)
-        except BufferError as e:
-            sys.stderr.write('%% Local producer queue is full (%d messages awaiting delivery): try again\n' % len(p))
-        p.poll(0)
+def delivery_report(err, msg):
+    """Called once for each message produced to indicate delivery result.
+    Triggered by poll() or flush()."""
+    if err is not None:
+        print(f"Message delivery failed: {err}")
+    else:
+        print(f"Message delivered to {msg.topic()} [{msg.partition()}]")
 
-    # Wait until all messages have been delivered
-    sys.stderr.write('%% Waiting for %d deliveries\n' % len(p))
-    p.flush()
+
+some_data_source = [str(i) for i in range(1000)]
+for data in some_data_source:
+    # Trigger any available delivery report callbacks from previous produce() calls
+    producer.poll(0)
+
+    # Asynchronously produce a message, the delivery report callback
+    # will be triggered from poll() above, or flush() below, when the message has
+    # been successfully delivered or failed permanently.
+    producer.produce(EVENTHUB_NAME, f"Hello {data}".encode("utf-8"), callback=delivery_report)
+
+# Wait for any outstanding messages to be delivered and delivery report
+# callbacks to be triggered.
+producer.flush()

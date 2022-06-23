@@ -1,15 +1,9 @@
 #!/bin/bash
-echo "Downloading/installing necessary dependencies"
-sudo apt-get install git openssl libssl-dev build-essential python-pip python-dev librdkafka-dev
-git clone https://github.com/edenhill/librdkafka
 
-echo "Setting up librdkafka"
-cd librdkafka
-./configure
-make
-sudo make install
-cd ..
+sudo apt-get update
 
-echo "Setting up Confluent's Python Kafka library"
-sudo pip install confluent-kafka
+sudo apt-get install python3.8
+
+echo "Setting up required dependencies"
+sudo pip3 --disable-pip-version-check --no-cache-dir install -r
 echo "Try running the samples now!"
